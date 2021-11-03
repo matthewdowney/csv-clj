@@ -3,7 +3,7 @@
   {:author "Matthew Downey"}
   (:require [clojure.java.io :as io])
   (:refer-clojure :exclude [read write])
-  (:import (de.siegmar.fastcsv.writer CsvWriter)
+  (:import (de.siegmar.fastcsv.writer CsvWriter LineDelimiter)
            (java.io Closeable)
            (de.siegmar.fastcsv.reader CsvReader CloseableIterator CsvRow)))
 
@@ -23,21 +23,45 @@
   ICSVReader (read [this] (when (.hasNext rows) (.getFields ^CsvRow (.next rows))))
   Closeable (close [this] (.close rows)))
 
-(defn ^CSVWriter writer ;; TODO: Options
+(defn ^CSVWriter writer
   "Return a CSV writer for the given file, path, or backing writer.
 
   Should be used inside `with-open` to ensure that the writer is properly
-  closed."
-  [x]
-  (CSVWriter. (.. CsvWriter builder (build (io/writer x)))))
+  closed.
 
-(defn ^CSVReader reader ;; TODO: Options
+  Valid options are
+    :separator (Default \\,)
+    :quote (Default \\\")
+    :newline (:lf (default) or :cr+lf)"
+  ([x] (writer x {}))
+  ([x {:keys [separator quote newline]}]
+   (CSVWriter.
+     (.build
+       (cond-> (CsvWriter/builder)
+               separator (.fieldSeparator separator)
+               quote (.quoteCharacter quote)
+               newline (.lineDelimiter (case newline
+                                         :lf LineDelimiter/LF
+                                         :cr+lf LineDelimiter/CRLF)))
+       (io/writer x)))))
+
+(defn ^CSVReader reader
   "Return a CSV reader for the given file, path, or backing reader.
 
   Should be used inside `with-open` to ensure that the reader is properly
-  closed."
-  [x]
-  (CSVReader. (.. CsvReader builder (build (io/reader x)) iterator)))
+  closed.
+
+  Valid options are
+    :separator (Default \\,)
+    :quote (Default \\\")"
+  ([x] (reader x {}))
+  ([x {:keys [separator quote]}]
+   (CSVReader.
+     (-> (cond-> (CsvReader/builder)
+                 separator (.fieldSeparator separator)
+                 quote (.quoteCharacter quote))
+         (.build (io/reader x))
+         (.iterator)))))
 
 (defn write-csv
   "Write rows (shaped [[string]]) with the given writer (eager)."
