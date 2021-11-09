@@ -9,7 +9,8 @@
             [clojure.java.io :as io]
             [clojure.pprint :as pprint]
             [clojure.string :as string])
-  (:import (java.util Random)))
+  (:import (java.util Random)
+           (java.io ByteArrayOutputStream ByteArrayInputStream)))
 
 (set! *warn-on-reflection* true)
 
@@ -42,27 +43,33 @@
 
 ;;; Simple benchmark
 
+(def unstructured-bytes (atom nil))
+(def structured-bytes (atom nil))
+(def ^:const cap (long (Math/pow 2 28)))
+
 (defn clojure-data-csv-unstructured-write [data]
-  (with-open [w (io/writer "bench/data.csv")]
+  (with-open [w (io/writer (ByteArrayOutputStream. cap))]
     (data.csv/write-csv w data)))
 
 (defn clojure-data-csv-unstructured-read []
-  (with-open [r (io/reader "bench/data.csv")]
+  (with-open [r (io/reader (ByteArrayInputStream. @unstructured-bytes))]
     (doall (data.csv/read-csv r))))
 
 (defn unstructured-write [data]
-  (with-open [w (csv/writer "bench/csv-clj")]
-    (csv/write-csv w data)))
+  (let [baos (ByteArrayOutputStream. cap)]
+    (with-open [w (csv/writer (io/writer baos))]
+      (csv/write-csv w data)
+      (reset! unstructured-bytes (.toByteArray baos)))))
 
 (defn unstructured-read []
-  (with-open [r (csv/reader "bench/csv-clj")]
+  (with-open [r (csv/reader (io/reader (ByteArrayInputStream. @unstructured-bytes)))]
     (doall (csv/read-csv r))))
 
 
 ;;; Benchmark with structured data
 
 (defn clojure-data-csv-structured-write [data]
-  (with-open [w (io/writer "bench/data.csv")]
+  (with-open [w (io/writer (ByteArrayOutputStream. cap))]
     (let [x (first data)]
       (data.csv/write-csv
         w
@@ -71,7 +78,7 @@
           (map vals data)))))) ; rows
 
 (defn clojure-data-csv-structured-read []
-  (with-open [r (io/reader "bench/data.csv")]
+  (with-open [r (io/reader (ByteArrayInputStream. @structured-bytes))]
     (let [data (data.csv/read-csv r)
           headers (map keyword (first data))]
       (->> (rest data)
@@ -87,11 +94,13 @@
     [:qux identity identity]))
 
 (defn structured-write [data]
-  (with-open [w (csv/writer "bench/csv-clj")]
-    (csv/write-csv-with w codec data)))
+  (let [baos (ByteArrayOutputStream. cap)]
+    (with-open [w (csv/writer (io/writer baos))]
+      (csv/write-csv-with w codec data))
+    (reset! structured-bytes (.toByteArray baos))))
 
 (defn structured-read []
-  (with-open [r (csv/reader "bench/csv-clj")]
+  (with-open [r (csv/reader (io/reader (ByteArrayInputStream. @structured-bytes)))]
     (doall (csv/read-csv-with r codec))))
 
 
@@ -108,14 +117,13 @@
 (defn bench* [dbg f trials]
   (System/gc)
 
-  (print "Warming up... ")
+  (print "Running warm up iterations: ")
   (flush)
   (dotimes [i 4]
     (f)
-    (print i)
-    (print " ")
+    (print i "")
     (flush))
-  (println "\n")
+  (println "")
 
   (let [times (mapv
                 (fn [trial]
@@ -145,25 +153,24 @@
   (let [_ (println "Generating benchmark data...")
         udata (into [] (take n) unstructured-data)
         sdata (into [] (take n) structured-data)
-
-        tbl [{""                 (str "Write to disk")
+        tbl [{""                 "Write unstructured"
               "csv-clj"          (str (bench unstructured-write trials udata) "ms")
               "clojure.data/csv" (str (bench clojure-data-csv-unstructured-write trials udata) "ms")}
-             {""                 (str "Write structured data to disk")
+             {""                 "Write structured"
               "csv-clj"          (str (bench structured-write trials sdata) "ms")
               "clojure.data/csv" (str (bench clojure-data-csv-structured-write trials sdata) "ms")}]]
     tbl))
 
 (defn read-benchmarks []
-  (let [tbl [{""                 (str "Read from disk")
+  (let [tbl [{""                 "Read unstructured"
               "csv-clj"          (str (bench unstructured-read trials) "ms")
               "clojure.data/csv" (str (bench clojure-data-csv-unstructured-read trials) "ms")}
-             {""                 (str "Read structured data from disk")
+             {""                 "Read structured"
               "csv-clj"          (str (bench structured-read trials) "ms")
               "clojure.data/csv" (str (bench clojure-data-csv-structured-read trials) "ms")}]]
     tbl))
 
-(defn benchmark [& {:keys [n] :or {n max-rows}}]
+(defn benchmark [& {:keys [n] :or {n 1000000}}]
   (assert (<= n max-rows))
   (let [nstr (apply
                format
@@ -185,4 +192,5 @@
 (comment
   ;; Run like so
   (benchmark)
+  (benchmark :n 200000)
   (benchmark :n 1000000))
