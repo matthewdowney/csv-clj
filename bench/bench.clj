@@ -7,14 +7,15 @@
   (:require [clojure.data.csv :as data.csv]
             [com.mjdowney.csv-clj :as csv]
             [clojure.java.io :as io]
-            [clojure.pprint :as pprint])
+            [clojure.pprint :as pprint]
+            [clojure.string :as string])
   (:import (java.util Random)))
 
 (set! *warn-on-reflection* true)
 
 
 ;;; Data used for benchmarking
-(def max-rows 5000000)
+(def max-rows 10000000)
 (def alphabet (vec (concat [\" \,] (map char (range 58 97)))))
 
 (def unstructured-data
@@ -105,7 +106,18 @@
         :else (recur (subvec nums 1 (dec cnt)))))))
 
 (defn bench* [dbg f trials]
-  (let [times (map
+  (System/gc)
+
+  (print "Warming up... ")
+  (flush)
+  (dotimes [i 4]
+    (f)
+    (print i)
+    (print " ")
+    (flush))
+  (println "\n")
+
+  (let [times (mapv
                 (fn [trial]
                   (print (format "#%-2s Timing %s... " trial dbg))
                   (flush)
@@ -126,6 +138,8 @@
        (bench* ~(str f) (fn [] (~f data#)) ~trials))
     `(bench* ~(str f) ~f ~trials)))
 
+(def ^:const trials 5)
+
 (defn write-benchmarks [n]
   (io/make-parents "bench/test.csv")
   (let [_ (println "Generating benchmark data...")
@@ -133,20 +147,20 @@
         sdata (into [] (take n) structured-data)
 
         tbl [{""                 (str "Write to disk")
-              "csv-clj"          (str (bench unstructured-write 3 udata) "ms")
-              "clojure.data/csv" (str (bench clojure-data-csv-unstructured-write 3 udata) "ms")}
+              "csv-clj"          (str (bench unstructured-write trials udata) "ms")
+              "clojure.data/csv" (str (bench clojure-data-csv-unstructured-write trials udata) "ms")}
              {""                 (str "Write structured data to disk")
-              "csv-clj"          (str (bench structured-write 3 sdata) "ms")
-              "clojure.data/csv" (str (bench clojure-data-csv-structured-write 3 sdata) "ms")}]]
+              "csv-clj"          (str (bench structured-write trials sdata) "ms")
+              "clojure.data/csv" (str (bench clojure-data-csv-structured-write trials sdata) "ms")}]]
     tbl))
 
 (defn read-benchmarks []
   (let [tbl [{""                 (str "Read from disk")
-              "csv-clj"          (str (bench unstructured-read 3) "ms")
-              "clojure.data/csv" (str (bench clojure-data-csv-unstructured-read 3) "ms")}
+              "csv-clj"          (str (bench unstructured-read trials) "ms")
+              "clojure.data/csv" (str (bench clojure-data-csv-unstructured-read trials) "ms")}
              {""                 (str "Read structured data from disk")
-              "csv-clj"          (str (bench structured-read 3) "ms")
-              "clojure.data/csv" (str (bench clojure-data-csv-structured-read 3) "ms")}]]
+              "csv-clj"          (str (bench structured-read trials) "ms")
+              "clojure.data/csv" (str (bench clojure-data-csv-structured-read trials) "ms")}]]
     tbl))
 
 (defn benchmark [& {:keys [n] :or {n max-rows}}]
@@ -154,16 +168,21 @@
   (let [nstr (apply
                format
                (cond
-                 (> n 1000000) ["%smm" (/ n 1000000.0)]
-                 (> n 1000) ["%sk" (/ n 1000.0)]
+                 (>= n 1000000) ["%smm" (/ n 1000000.0)]
+                 (>= n 1000) ["%sk" (/ n 1000.0)]
                  :else ["%s" n]))
         _ (println "Benchmarking with" nstr "rows of data...")
         wbs (write-benchmarks n)
-        rbs (read-benchmarks)]
+        rbs (read-benchmarks)
+        comparison (fn [x]
+                     (let [this (get x "csv-clj")
+                           that (get x "clojure.data/csv")
+                           n (fn [s] (-> (string/split s #"m") first bigdec double))]
+                       (assoc x "Faster by" (format "%.2fx" (/ (n that) (max (n this) 1))))))]
     (println "Benchmarks for writing and then reading" nstr "rows:")
-    (pprint/print-table (concat wbs rbs))))
+    (pprint/print-table (map comparison (concat wbs rbs)))))
 
 (comment
   ;; Run like so
   (benchmark)
-  (benchmark :n 100000))
+  (benchmark :n 1000000))
