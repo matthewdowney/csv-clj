@@ -1,11 +1,12 @@
+;; TODO: Unit tests
 (ns com.mjdowney.csv-clj
   "Fast CSV reading and writing for both structured and unstructured data."
-  {:author "Matthew Downey"}
   (:require [clojure.java.io :as io])
   (:refer-clojure :exclude [read write])
   (:import (de.siegmar.fastcsv.writer CsvWriter LineDelimiter)
            (java.io Closeable)
-           (de.siegmar.fastcsv.reader CsvReader CloseableIterator CsvRow)))
+           (de.siegmar.fastcsv.reader CsvReader CloseableIterator CsvRow)
+           (java.lang.reflect Method)))
 
 (set! *warn-on-reflection* true)
 
@@ -135,6 +136,13 @@
                     (list inf (list `nth sym idx)))])
                (map-indexed vector fields+outf+inf)))))))
 
+
+;; E.g. a record field named "size" can't be accessed via (.size record),
+;; because "size" already refers to a method.
+(defrecord Dummy [])
+(defonce forbidden-names (into #{} (map #(.getName ^Method %) (.getMethods Dummy))))
+
+
 (defmacro record-codec
   "Like `codec`, but takes a record type as the first argument.
 
@@ -161,9 +169,12 @@
          [~@(map
               (fn [[field outf]]
                 (assert (keyword? field) "all record fields are keywords")
-                (let [get-field (list `..
-                                      (with-meta sym {:tag record-type})
-                                      (symbol (name field)))]
+                ; Some fields can't be accessed via .field
+                (let [get-field (if (contains? forbidden-names (name field))
+                                  (list field sym)
+                                  (list `..
+                                        (with-meta sym {:tag record-type})
+                                        (symbol (name field))))]
                   (if (= outf `identity)
                     get-field
                     (list outf get-field))))
@@ -179,8 +190,8 @@
 
 (comment
   ;; E.g.
-  (defrecord Foo [x y])
-  (macroexpand-1 `(record-codec Foo [:x identity identity] [:y str bigdec])))
+  (defrecord Foo [x size])
+  (macroexpand-1 `(record-codec Foo [:x identity identity] [:size str bigdec])))
 
 (defn write-csv-with
   "Write a CSV from `data`, a series of maps / records, and a `codec`."
