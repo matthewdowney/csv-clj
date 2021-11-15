@@ -4,7 +4,7 @@
   (:require [clojure.java.io :as io])
   (:refer-clojure :exclude [read write])
   (:import (de.siegmar.fastcsv.writer CsvWriter LineDelimiter)
-           (java.io Closeable)
+           (java.io Closeable StringReader StringWriter)
            (de.siegmar.fastcsv.reader CsvReader CloseableIterator CsvRow)
            (java.lang.reflect Method)))
 
@@ -66,13 +66,20 @@
 
 (defn write-csv
   "Write rows (shaped [[string]]) with the given writer (eager)."
-  [csv-writer rows]
-  (run! (fn [row] (write csv-writer row)) rows))
+  ([rows]
+   (let [sw (StringWriter.)]
+     (with-open [w (writer sw)]
+       (write-csv w rows))
+     (.toString sw)))
+  ([csv-writer rows]
+   (run! (fn [row] (write csv-writer row)) rows)))
 
 (defn read-csv
   "Read rows (shaped [[string]]) with the given reader (lazy)."
   [csv-reader]
-  (take-while some? (repeatedly (fn [] (read csv-reader)))))
+  (if (string? csv-reader)
+    (read-csv (reader (StringReader. csv-reader)))
+    (take-while some? (repeatedly (fn [] (read csv-reader))))))
 
 (comment
   ; Writing
@@ -196,24 +203,33 @@
 
 (defn write-csv-with
   "Write a CSV from `data`, a series of maps / records, and a `codec`."
-  [writer codec data]
-  (write writer (headers codec))
-  (run! (fn [row] (write writer (>row codec row))) data))
+  ([codec data]
+   (let [sw (StringWriter.)]
+     (with-open [w (writer sw)]
+       (write-csv-with w codec data))
+     (.toString sw)))
+  ([writer codec data]
+   (write writer (headers codec))
+   (run! (fn [row] (write writer (>row codec row))) data)))
 
 (defn read-csv-with
   "Read a CSV into a series of maps or records according to `codec`."
-  [reader codec]
-  ; discard headers -- codec already knows what they should be
-  (let [hd (read reader)]
-    (assert
-      (= hd (headers codec))
-      (format "headers (%s) match codec (%s)" (vec hd) (headers codec))))
+  [csv-reader codec]
+  (if (string? csv-reader)
+    (read-csv-with (reader (StringReader. csv-reader)) codec)
 
-  (sequence
-    (comp
-      (take-while some?)
-      (map #(<row codec %)))
-    (repeatedly (fn [] (read reader)))))
+    (do
+      ; discard headers -- codec already knows what they should be
+      (let [hd (read csv-reader)]
+        (assert
+          (= hd (headers codec))
+          (format "headers (%s) match codec (%s)" (vec hd) (headers codec))))
+
+      (sequence
+        (comp
+          (take-while some?)
+          (map #(<row codec %)))
+        (repeatedly (fn [] (read csv-reader)))))))
 
 
 ;;; Examples
