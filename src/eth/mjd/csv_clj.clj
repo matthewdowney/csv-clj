@@ -1,4 +1,3 @@
-;; TODO: Unit tests
 (ns eth.mjd.csv-clj
   "Fast CSV reading and writing for both structured and unstructured data."
   (:require [clojure.java.io :as io])
