@@ -1,5 +1,5 @@
 ;; TODO: Unit tests
-(ns com.mjdowney.csv-clj
+(ns eth.mjd.csv-clj
   "Fast CSV reading and writing for both structured and unstructured data."
   (:require [clojure.java.io :as io])
   (:refer-clojure :exclude [read write])
@@ -188,6 +188,7 @@
                    (list inf (list `nth sym idx)))) ;; TODO: Is nth slow?
                (map-indexed vector fields+outf+inf)))))))
 
+
 (comment
   ;; E.g.
   (defrecord Foo [x size])
@@ -220,7 +221,7 @@
 (comment
   ;; The basic read / write interface is nearly a drop-in replacement for
   ;; `data.csv` (only the writer construction changes):
-  (require '[com.mjdowney.csv-clj :as csv]
+  (require '[eth.mjd.csv-clj :as csv]
            '[clojure.java.io :as io])
 
   (with-open [writer (csv/writer (io/writer "out-file.csv"))]

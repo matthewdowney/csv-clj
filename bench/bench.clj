@@ -4,8 +4,9 @@
 
   Invoke with `clj -X:bench`, or `clj -X:bench :n 100000` to restrict the
   number of rows used."
-  (:require [clojure.data.csv :as data.csv]
-            [com.mjdowney.csv-clj :as csv]
+  (:require [eth.mjd.csv-clj :as csv]
+            [clojure.data.csv :as data.csv]
+
             [clojure.java.io :as io]
             [clojure.pprint :as pprint]
             [clojure.string :as string])
