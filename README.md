@@ -4,7 +4,7 @@ Write CSV files 10x faster than clojure/data.csv and work
 easily with structured data. Built on top of the excellent 
 [osiegmar/FastCSV](https://github.com/osiegmar/FastCSV) Java library.
 
-v0.01 | [CHANGELOG](CHANGELOG.md) | Uses [Break Versioning](https://github.com/ptaoussanis/encore/blob/master/BREAK-VERSIONING.md)
+v0.0.2 | [CHANGELOG](CHANGELOG.md) | Uses [Break Versioning](https://github.com/ptaoussanis/encore/blob/master/BREAK-VERSIONING.md)
 
 ## Usage
 

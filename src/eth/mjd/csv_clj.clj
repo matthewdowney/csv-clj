@@ -9,7 +9,6 @@
 
 (set! *warn-on-reflection* true)
 
-
 ;;; Base CSV reading / writing functionality
 
 (defprotocol ICSVWriter (write [this cells] "Write a row of [string]."))
@@ -201,35 +200,42 @@
   (macroexpand-1 `(record-codec Foo [:x identity identity] [:size str bigdec])))
 
 (defn write-csv-with
-  "Write a CSV from `data`, a series of maps / records, and a `codec`."
+  "Write a CSV from `data`, a series of maps / records, and a `codec`.
+
+  Pass {:omit-header? true} to write the rows only, without headers."
   ([codec data]
    (let [sw (StringWriter.)]
      (with-open [w (writer sw)]
        (write-csv-with w codec data))
      (.toString sw)))
-  ([writer codec data]
-   (write writer (headers codec))
+  ([writer codec data & {:keys [omit-header?]}]
+   (when-not omit-header?
+     (write writer (headers codec)))
    (run! (fn [row] (write writer (>row codec row))) data)))
 
 (defn read-csv-with
-  "Read a CSV into a series of maps or records according to `codec`."
-  [csv-reader codec]
+  "Read a CSV into a series of maps or records according to `codec`.
+
+  Pass {:omit-header? true} if the CSV contains no headers, in which case the
+  first row interpreted positionally without checking that the headers match
+  the codec."
+  [csv-reader codec & {:keys [omit-header?]}]
   (if (string? csv-reader)
     (read-csv-with (reader (StringReader. csv-reader)) codec)
 
     (do
       ; discard headers -- codec already knows what they should be
-      (let [hd (read csv-reader)]
-        (assert
-          (= hd (headers codec))
-          (format "headers (%s) match codec (%s)" (vec hd) (headers codec))))
+      (when-not omit-header?
+        (let [hd (read csv-reader)]
+          (assert
+            (= hd (headers codec))
+            (format "headers (%s) match codec (%s)" (vec hd) (headers codec)))))
 
       (sequence
         (comp
           (take-while some?)
           (map #(<row codec %)))
         (repeatedly (fn [] (read csv-reader)))))))
-
 
 ;;; Examples
 
